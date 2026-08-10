@@ -1,7 +1,8 @@
-﻿import streamlit as st
+import streamlit as st
 import pandas as pd
 import plotly.express as px
 import datetime
+import uuid
 
 st.set_page_config(page_title="Sistem WIPDASH - Hospital Rompin", page_icon="🏥", layout="wide")
 
@@ -26,165 +27,209 @@ if not st.session_state['log_masuk']:
     st.stop()
 
 # ==========================================
-# 2. INISIALISASI DATA & FUNGSI MASA LIVE
+# 2. INISIALISASI DATABASE & FUNGSI BANTUAN
 # ==========================================
-if 'rekod_data' not in st.session_state:
-    st.session_state['rekod_data'] = pd.DataFrame()
+if 'tiket_aktif' not in st.session_state:
+    st.session_state['tiket_aktif'] = {}
 
-# Senarai tahap untuk setiap kategori berdasarkan templat Hospital
+if 'rekod_selesai' not in st.session_state:
+    st.session_state['rekod_selesai'] = pd.DataFrame()
+
+def dapatkan_waktu_malaysia():
+    return (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).time()
+
+def dapatkan_tarikh_malaysia():
+    return (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).date()
+
+def kira_beza_minit(masa_mula, masa_akhir):
+    mula_dt = datetime.datetime.strptime(masa_mula, "%H:%M")
+    akhir_dt = datetime.datetime.strptime(masa_akhir, "%H:%M")
+    if akhir_dt < mula_dt:
+        akhir_dt += datetime.timedelta(days=1)
+    return round((akhir_dt - mula_dt).total_seconds() / 60, 1)
+
 tahap_troli = ['Troli Sampai', 'Mula Saring', 'Tamat Saring', 'Mula Fill', 'Tamat Fill', 'Mula Semak', 'Bekalan Siap', 'Ambil Bekalan']
 tahap_lain = ['Masa Sampai', 'Bekalan Siap', 'Ambil Bekalan']
-
-# Fungsi merekod masa semasa
-def set_masa_live(kunci):
-    st.session_state[kunci] = datetime.datetime.now().time()
-
-# Pastikan semua kunci masa ada dalam memory
-for t in tahap_troli + tahap_lain:
-    kunci = f"masa_{t.replace(' ', '_')}"
-    if kunci not in st.session_state:
-        st.session_state[kunci] = datetime.datetime.now().time()
 
 # ==========================================
 # 3. ANTARAMUKA UTAMA
 # ==========================================
 col_title, col_logout = st.columns([8, 1])
 with col_title:
-    st.title("🏥 Sistem WIPDASH - Hospital Rompin")
+    st.title("🏥 Sistem WIPDASH - Hospital Rompin (V13)")
 with col_logout:
-    st.write("") 
+    st.write("")
     if st.button("Log Keluar"):
         st.session_state['log_masuk'] = False
         st.rerun()
 
-st.markdown("**Pemantauan Format Rasmi: Troli Ubat, Floor Stock & Dadah Berbahaya**")
-
 senarai_unit = ['Kenanga 2A', 'Kenanga 2B', 'Kenanga 1A', 'Unit Kecemasan & Trauma', 'Klinik Pakar', 'Unit Hemodialisis']
 senarai_kategori = ['Preskripsi Troli Ubat', 'Floor Stock', 'Dadah Berbahaya (DD) / Psikotropik']
 
-tab1, tab2 = st.tabs(["📝 1. Borang Perakam Masa (Punch-In)", "📊 2. Dashboard Analitik"])
+tab1, tab2, tab3 = st.tabs(["🆕 1. Buka Tiket Baru", "⏳ 2. Kerja Sedang Berjalan (WIP)", "📊 3. Dashboard Analitik"])
 
 # ------------------------------------------
-# TAB 1: BORANG KEMASUKAN DATA
+# TAB 1: BUKA TIKET BARU
 # ------------------------------------------
 with tab1:
-    st.subheader("Borang Kemasukan Rekod Harian")
+    st.subheader("Daftar Penerimaan Baru")
+    st.caption("Pilih wad dan kategori, kemudian klik Buka Tiket.")
     
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     with col1:
-        tarikh = st.date_input("📅 Tarikh Rekod", datetime.date.today())
+        wad_baru = st.selectbox("🏥 Pilih Unit / Wad", senarai_unit)
     with col2:
-        kategori = st.selectbox("📂 Pilih Kategori", senarai_kategori)
-    with col3:
-        unit = st.selectbox("🏥 Pilih Unit / Wad", senarai_unit)
-    
-    st.markdown("---")
-    st.markdown(f"#### ⏱️ Perakam Masa: {kategori}")
-    st.caption("Klik butang biru untuk rekod masa semasa. Boleh diubah secara manual jika perlu.")
-    
-    # Simpanan masa yang dipilih
-    masa_dipilih = {}
-    
-    # LOGIK A: JIKA TROLI UBAT (8 Peringkat)
-    if kategori == 'Preskripsi Troli Ubat':
-        # Susun dalam 4 lajur x 2 baris supaya kemas
-        cols_troli1 = st.columns(4)
-        cols_troli2 = st.columns(4)
-        semua_lajur = cols_troli1 + cols_troli2
+        kat_baru = st.selectbox("📂 Pilih Kategori Pembekalan", senarai_kategori)
         
-        for i, tahap in enumerate(tahap_troli):
-            kunci = f"masa_{tahap.replace(' ', '_')}"
-            with semua_lajur[i]:
-                st.write(f"**{i+1}. {tahap}**")
-                st.button(f"🕒 Set {tahap}", on_click=set_masa_live, args=(kunci,), key=f"btn_{kunci}", use_container_width=True)
-                masa_dipilih[tahap] = st.time_input(f"Masa:", value=st.session_state[kunci], key=f"input_{kunci}")
-    
-    # LOGIK B: JIKA FLOOR STOCK / DD (3 Peringkat)
-    else:
-        cols_lain = st.columns(3)
-        for i, tahap in enumerate(tahap_lain):
-            kunci = f"masa_{tahap.replace(' ', '_')}"
-            with cols_lain[i]:
-                st.write(f"**{i+1}. {tahap}**")
-                st.button(f"🕒 Set {tahap}", on_click=set_masa_live, args=(kunci,), key=f"btn_{kunci}", use_container_width=True)
-                masa_dipilih[tahap] = st.time_input(f"Masa:", value=st.session_state[kunci], key=f"input_{kunci}")
-
-    st.write("")
-    
-    # BUTANG SIMPAN
-    if st.button("💾 SIMPAN REKOD KE DALAM SISTEM", type="primary", use_container_width=True):
-        
-        # Pengiraan TAT Keseluruhan (Mula hingga Akhir)
-        if kategori == 'Preskripsi Troli Ubat':
-            mula_dt = datetime.datetime.combine(tarikh, masa_dipilih['Troli Sampai'])
-            tamat_dt = datetime.datetime.combine(tarikh, masa_dipilih['Ambil Bekalan'])
-        else:
-            mula_dt = datetime.datetime.combine(tarikh, masa_dipilih['Masa Sampai'])
-            tamat_dt = datetime.datetime.combine(tarikh, masa_dipilih['Ambil Bekalan'])
-            
-        # Logik jika shift malam
-        if tamat_dt < mula_dt:
-            tamat_dt += datetime.timedelta(days=1)
-            
-        tat_minit = (tamat_dt - mula_dt).total_seconds() / 60
-        
-        # Bina Baris Data Baru
-        data_dict = {
-            'Tarikh': [tarikh.strftime("%d-%m-%Y")],
-            'Kategori': [kategori],
-            'Unit / Wad': [unit],
-            'TAT Keseluruhan (Minit)': [round(tat_minit, 1)]
+    if st.button("➕ BUKA TIKET BARU", type="primary"):
+        id_unik = str(uuid.uuid4())[:8] 
+        st.session_state['tiket_aktif'][id_unik] = {
+            'Tarikh': dapatkan_tarikh_malaysia().strftime("%d-%m-%Y"),
+            'Wad': wad_baru,
+            'Kategori': kat_baru,
+            'Masa': {}
         }
-        
-        # Masukkan semua masa ke dalam jadual
-        for tahap, nilai_masa in masa_dipilih.items():
-            data_dict[tahap] = [nilai_masa.strftime("%H:%M")]
-            
-        rekod_baru = pd.DataFrame(data_dict)
-        st.session_state['rekod_data'] = pd.concat([st.session_state['rekod_data'], rekod_baru], ignore_index=True)
-        st.success(f"✅ Berjaya! Masa Pusingan (TAT) direkodkan: {round(tat_minit, 1)} minit.")
-
-    # Paparan Jadual
-    if not st.session_state['rekod_data'].empty:
-        st.write("---")
-        st.write("### 📋 Senarai Rekod (Sesi Ini)")
-        st.dataframe(st.session_state['rekod_data'], use_container_width=True)
-        
-        csv = st.session_state['rekod_data'].to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Muat Turun CSV Rekod", data=csv,
-            file_name=f"WIPDASH_{tarikh}.csv", mime="text/csv"
-        )
+        st.success(f"✅ Tiket {wad_baru} ({kat_baru}) berjaya dibuka! Sila ke Tab 2.")
 
 # ------------------------------------------
-# TAB 2: DASHBOARD ANALITIK (GRAF)
+# TAB 2: KERJA SEDANG BERJALAN (WIP)
 # ------------------------------------------
 with tab2:
-    df = st.session_state['rekod_data']
+    st.subheader("Senarai Kerja Yang Belum Selesai (WIP)")
+    
+    if not st.session_state['tiket_aktif']:
+        st.info("Bagus! Tiada kerja yang tertunggak buat masa ini.")
+    else:
+        for id_tiket, data_tiket in list(st.session_state['tiket_aktif'].items()):
+            wad = data_tiket['Wad']
+            kategori = data_tiket['Kategori']
+            
+            with st.expander(f"📌 {wad} - {kategori} (ID: {id_tiket})", expanded=True):
+                senarai_tahap = tahap_troli if kategori == 'Preskripsi Troli Ubat' else tahap_lain
+                
+                cols = st.columns(len(senarai_tahap) // 2 if len(senarai_tahap) > 3 else 3)
+                
+                for i, tahap in enumerate(senarai_tahap):
+                    col_index = i % len(cols)
+                    with cols[col_index]:
+                        if tahap in data_tiket['Masa']:
+                            st.success(f"✅ {tahap}\n{data_tiket['Masa'][tahap]}")
+                        else:
+                            st.write(f"**{tahap}**")
+                            if st.button(f"🕒 Punch", key=f"btn_{id_tiket}_{tahap}", use_container_width=True):
+                                st.session_state['tiket_aktif'][id_tiket]['Masa'][tahap] = dapatkan_waktu_malaysia().strftime("%H:%M")
+                                st.rerun() 
+                
+                st.markdown("---")
+                st.markdown("#### 👤 Jejak Akauntabiliti Kakitangan & Wad")
+                
+                col_nama1, col_nama2 = st.columns(2)
+                with col_nama1:
+                    st.text_input("👨‍⚕️ Nama Staf Farmasi Pelaksana:", placeholder="Contoh: Ali / Siti", key=f"pelaksana_{id_tiket}")
+                with col_nama2:
+                    st.text_input("📞 Nama Staf Farmasi Pemanggil:", placeholder="Contoh: Chong", key=f"pemanggil_{id_tiket}")
+                    
+                col_nama3, col_nama4 = st.columns(2)
+                with col_nama3:
+                    st.text_input("👩‍⚕️ Nama Staf Wad Dihubungi (Penerima):", placeholder="Contoh: SN Aminah", key=f"penerima_{id_tiket}")
+                    st.checkbox("⚠️ Panggilan Tidak Berjawab (Wad tidak angkat telefon)", key=f"tak_jawab_{id_tiket}")
+                with col_nama4:
+                    st.time_input("⏰ Waktu Panggilan Dibuat:", value=dapatkan_waktu_malaysia(), key=f"waktu_call_{id_tiket}")
+                
+                st.markdown("---")
+                st.markdown("#### 📝 Catatan Tambahan & Piagam Pelanggan")
+                
+                # Sistem Penggera Automatik (Auto-Warning)
+                if kategori == 'Preskripsi Troli Ubat':
+                    st.info("🎯 **Sasaran Piagam Pelanggan:** \n* **Saring:** 2 Jam (120 min) \n* **Filling:** 1 Jam (60 min) \n* **Semak:** 30 Minit \n* **Keseluruhan:** 4 Jam")
+                    
+                    # Semak Saringan
+                    if 'Mula Saring' in data_tiket['Masa'] and 'Tamat Saring' in data_tiket['Masa']:
+                        masa_saring = kira_beza_minit(data_tiket['Masa']['Mula Saring'], data_tiket['Masa']['Tamat Saring'])
+                        if masa_saring > 120:
+                            st.error(f"🚨 **AMARAN:** Proses Saringan mengambil masa {masa_saring} minit (Melebihi target 120 minit!)")
+                    
+                    # Semak Filling
+                    if 'Mula Fill' in data_tiket['Masa'] and 'Tamat Fill' in data_tiket['Masa']:
+                        masa_fill = kira_beza_minit(data_tiket['Masa']['Mula Fill'], data_tiket['Masa']['Tamat Fill'])
+                        if masa_fill > 60:
+                            st.error(f"🚨 **AMARAN:** Proses Filling mengambil masa {masa_fill} minit (Melebihi target 60 minit!)")
+                            
+                    # Semak Semakan
+                    if 'Mula Semak' in data_tiket['Masa'] and 'Bekalan Siap' in data_tiket['Masa']:
+                        masa_semak = kira_beza_minit(data_tiket['Masa']['Mula Semak'], data_tiket['Masa']['Bekalan Siap'])
+                        if masa_semak > 30:
+                            st.error(f"🚨 **AMARAN:** Proses Semakan mengambil masa {masa_semak} minit (Melebihi target 30 minit!)")
+                
+                st.text_area("Sebab Kelewatan / Catatan (Sila isi jika melepasi Piagam Pelanggan atau terdapat amaran di atas):", placeholder="Contoh: Wad lambat hantar troli / Kekurangan staf", key=f"catatan_{id_tiket}")
+                
+                st.write("")
+                
+                if st.button(f"💾 SIAP & SIMPAN KE LAPORAN", key=f"simpan_{id_tiket}", type="primary"):
+                    tahap_mula = 'Troli Sampai' if kategori == 'Preskripsi Troli Ubat' else 'Masa Sampai'
+                    tahap_akhir = 'Ambil Bekalan'
+                    
+                    if tahap_mula in data_tiket['Masa'] and tahap_akhir in data_tiket['Masa']:
+                        tat_minit = kira_beza_minit(data_tiket['Masa'][tahap_mula], data_tiket['Masa'][tahap_akhir])
+                    else:
+                        tat_minit = 0.0 
+                    
+                    panggilan_tak_jawab = st.session_state.get(f"tak_jawab_{id_tiket}", False)
+                    penerima_wad = "TIDAK BERJAWAB" if panggilan_tak_jawab else st.session_state.get(f"penerima_{id_tiket}", "")
+                    
+                    waktu_call_value = st.session_state.get(f"waktu_call_{id_tiket}")
+                    waktu_call_str = waktu_call_value.strftime("%H:%M") if waktu_call_value else "Tidak Direkod"
+
+                    rekod_baru = {
+                        'Tarikh': data_tiket['Tarikh'], 
+                        'Kategori': kategori, 
+                        'Unit / Wad': wad, 
+                        'Pelaksana (Farmasi)': st.session_state.get(f"pelaksana_{id_tiket}", ""),
+                        'Pemanggil (Farmasi)': st.session_state.get(f"pemanggil_{id_tiket}", ""),
+                        'Penerima Panggilan (Wad)': penerima_wad,
+                        'Waktu Dihubungi': waktu_call_str,
+                        'Catatan / Sebab Lewat': st.session_state.get(f"catatan_{id_tiket}", ""),
+                        'TAT Keseluruhan (Minit)': tat_minit
+                    }
+                    for t in senarai_tahap:
+                        rekod_baru[t] = data_tiket['Masa'].get(t, "Tidak Direkod")
+                        
+                    df_baru = pd.DataFrame([rekod_baru])
+                    st.session_state['rekod_selesai'] = pd.concat([st.session_state['rekod_selesai'], df_baru], ignore_index=True)
+                    
+                    del st.session_state['tiket_aktif'][id_tiket]
+                    st.success("Rekod berserta catatan kelewatan berjaya disimpan!")
+                    st.rerun()
+
+# ------------------------------------------
+# TAB 3: DASHBOARD & REKOD SELESAI
+# ------------------------------------------
+with tab3:
+    df = st.session_state['rekod_selesai']
     
     if df.empty:
-        st.info("ℹ️ Sila simpan sekurang-kurangnya 1 rekod di Tab 1 untuk melihat graf.")
+        st.info("Belum ada tiket yang disiapkan dan disimpan.")
     else:
-        st.subheader("📊 Analitik TAT Keseluruhan Semasa")
-        kat_pilihan = st.selectbox("Tapis Mengikut Kategori:", ["Paparkan Semua"] + senarai_kategori)
+        st.subheader("📊 Analitik Pencapaian & Sejarah")
         
-        if kat_pilihan != "Paparkan Semua":
-            df_graf = df[df['Kategori'] == kat_pilihan]
-        else:
-            df_graf = df
+        kat_pilihan = st.selectbox("Tapis Graf Mengikut Kategori:", ["Paparkan Semua"] + senarai_kategori)
+        df_graf = df[df['Kategori'] == kat_pilihan] if kat_pilihan != "Paparkan Semua" else df
             
         if not df_graf.empty:
             avg_tat = round(df_graf['TAT Keseluruhan (Minit)'].mean(), 1)
-            
             col_kpi1, col_kpi2 = st.columns(2)
             col_kpi1.metric("⏱️ Purata TAT Keseluruhan", f"{avg_tat} Minit")
-            col_kpi2.metric("📦 Jumlah Pembekalan Disiapkan", f"{len(df_graf)} Unit")
+            col_kpi2.metric("📦 Jumlah Pembekalan Selesai", f"{len(df_graf)} Tiket")
             
             fig = px.bar(
                 df_graf, x='Unit / Wad', y='TAT Keseluruhan (Minit)', 
                 color='TAT Keseluruhan (Minit)', title=f"Prestasi: {kat_pilihan}",
-                color_continuous_scale='RdYlGn_r', text_auto=True
+                color_continuous_scale='RdYlGn_r'
             )
             st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("⚠️ Tiada data untuk kategori yang dipilih.")
+            
+        st.write("---")
+        st.write("### 📋 Jadual Rekod Penuh")
+        st.dataframe(df, use_container_width=True)
+        csv = df.to_csv(index=False).encode('utf-8')
+        st.download_button(label="📥 Muat Turun CSV", data=csv, file_name=f"WIPDASH_Laporan_{dapatkan_tarikh_malaysia()}.csv", mime="text/csv")
