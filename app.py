@@ -20,7 +20,7 @@ if not st.session_state['log_masuk']:
     if st.button("Log Masuk", type="primary"):
         if pin_input == PIN_RAHSIA:
             st.session_state['log_masuk'] = True
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.error("❌ PIN Salah. Sila cuba lagi.")
     st.stop()
@@ -55,7 +55,7 @@ with col_logout:
     st.write("") 
     if st.button("Log Keluar"):
         st.session_state['log_masuk'] = False
-        st.experimental_rerun()
+        st.rerun()
 
 st.markdown("**Pemantauan Format Rasmi: Troli Ubat, Floor Stock & Dadah Berbahaya**")
 
