@@ -27,16 +27,21 @@ if not st.session_state['log_masuk']:
     st.stop()
 
 # ==========================================
-# 2. INISIALISASI DATABASE & FUNGSI BANTUAN
+# 2. INISIALISASI DATABASE & NAVIGASI
 # ==========================================
 if 'tiket_aktif' not in st.session_state:
-    st.session_state['tiket_aktif'] = {} # Tab 2 (Farmasi WIP)
-
+    st.session_state['tiket_aktif'] = {} 
 if 'tiket_siap' not in st.session_state:
-    st.session_state['tiket_siap'] = {} # Tab 3 (Kaunter Serahan)
-
+    st.session_state['tiket_siap'] = {} 
 if 'rekod_selesai' not in st.session_state:
-    st.session_state['rekod_selesai'] = pd.DataFrame() # Tab 4 (Laporan)
+    st.session_state['rekod_selesai'] = pd.DataFrame() 
+
+# Sistem Navigasi Muka Surat
+if 'page' not in st.session_state:
+    st.session_state['page'] = 'Laman Utama'
+
+def tukar_muka(nama_muka):
+    st.session_state['page'] = nama_muka
 
 def dapatkan_waktu_malaysia():
     return (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).time()
@@ -54,32 +59,93 @@ def kira_beza_minit(masa_mula, masa_akhir):
     except:
         return 0.0
 
-# Senarai tahap HANYA untuk Farmasi (Ambil Bekalan dialihkan ke Kaunter Serahan)
 tahap_farmasi_troli = ['Troli Sampai', 'Mula Saring', 'Tamat Saring', 'Mula Fill', 'Tamat Fill', 'Mula Semak', 'Bekalan Siap']
 tahap_farmasi_lain = ['Masa Sampai', 'Mula Fill', 'Tamat Fill', 'Mula Semak', 'Bekalan Siap']
 
+senarai_unit = ['Kenanga 2A', 'Kenanga 2B', 'Kenanga 1A', 'Unit Kecemasan & Trauma', 'Klinik Pakar', 'Unit Hemodialisis']
+senarai_kategori = ['Preskripsi Troli Ubat', 'Floor Stock', 'Dadah Berbahaya (DD) / Psikotropik']
+
 # ==========================================
-# 3. ANTARAMUKA UTAMA
+# 3. KEPALA (HEADER) SISTEM
 # ==========================================
 col_title, col_logout = st.columns([8, 1])
 with col_title:
-    st.title("🏥 Sistem WIPDASH - Hospital Rompin (V20)")
+    st.title("🏥 Sistem WIPDASH - Hospital Rompin")
 with col_logout:
     st.write("")
     if st.button("Log Keluar"):
         st.session_state['log_masuk'] = False
         st.rerun()
+st.markdown("---")
 
-senarai_unit = ['Kenanga 2A', 'Kenanga 2B', 'Kenanga 1A', 'Unit Kecemasan & Trauma', 'Klinik Pakar', 'Unit Hemodialisis']
-senarai_kategori = ['Preskripsi Troli Ubat', 'Floor Stock', 'Dadah Berbahaya (DD) / Psikotropik']
+# ==========================================
+# 4. ENJIN NAVIGASI MUKA SURAT
+# ==========================================
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["🆕 1. Pendaftaran", "⏳ 2. Farmasi (WIP)", "📦 3. Kaunter Serahan", "📊 4. Dashboard", "⚠️ 5. BCP"])
+# ---------------------------------------------------------
+# MUKA SURAT 0: LAMAN UTAMA (MENU KAD INTERAKTIF)
+# ---------------------------------------------------------
+if st.session_state['page'] == 'Laman Utama':
+    st.subheader("Sila pilih modul operasi di bawah:")
+    st.write("")
+    
+    # CSS Custom untuk Kad agar nampak seperti Rujukan Gambar
+    st.markdown("""
+    <style>
+    .kad-menu {
+        padding: 20px;
+        border-radius: 10px;
+        text-align: center;
+        color: white;
+        margin-bottom: 10px;
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+    }
+    .kad-menu h2 { font-size: 50px; margin-bottom: 0; }
+    .kad-menu h4 { color: white; margin-top: 10px; margin-bottom: 5px; font-weight: bold; }
+    .kad-menu p { font-size: 14px; opacity: 0.9; }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Baris Pertama (3 Kad)
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown('<div class="kad-menu" style="background-color: #EF476F;"><h2>🆕</h2><h4>Pendaftaran Wad</h4><p>Wad daftar masuk bekalan</p></div>', unsafe_allow_html=True)
+        st.button("MASUK MODUL ➔", key="btn_m1", use_container_width=True, on_click=tukar_muka, args=("1. Pendaftaran",))
 
-# ------------------------------------------
-# TAB 1: BUKA TIKET BARU
-# ------------------------------------------
-with tab1:
+    with col2:
+        jumlah_wip = len(st.session_state['tiket_aktif'])
+        st.markdown(f'<div class="kad-menu" style="background-color: #118AB2;"><h2>⏳</h2><h4>Farmasi (WIP)</h4><p>{jumlah_wip} tiket sedang berjalan</p></div>', unsafe_allow_html=True)
+        st.button("MASUK MODUL ➔", key="btn_m2", use_container_width=True, on_click=tukar_muka, args=("2. Farmasi WIP",))
+
+    with col3:
+        jumlah_siap = len(st.session_state['tiket_siap'])
+        st.markdown(f'<div class="kad-menu" style="background-color: #06D6A0;"><h2>📦</h2><h4>Kaunter Serahan</h4><p>{jumlah_siap} wad sedia diambil</p></div>', unsafe_allow_html=True)
+        st.button("MASUK MODUL ➔", key="btn_m3", use_container_width=True, on_click=tukar_muka, args=("3. Kaunter Serahan",))
+
+    st.write("")
+    
+    # Baris Kedua (2 Kad)
+    col4, col5 = st.columns([1, 1])
+    with col4:
+        st.markdown('<div class="kad-menu" style="background-color: #FFD166;"><h2 style="color:black;">📊</h2><h4 style="color:black;">Dashboard Analitik</h4><p style="color:black;">Pencapaian KPI & Laporan</p></div>', unsafe_allow_html=True)
+        st.button("MASUK MODUL ➔", key="btn_m4", use_container_width=True, on_click=tukar_muka, args=("4. Dashboard",))
+        
+    with col5:
+        st.markdown('<div class="kad-menu" style="background-color: #073B4C;"><h2>⚠️</h2><h4>Pelan BCP</h4><p>Kemasukan data manual log</p></div>', unsafe_allow_html=True)
+        st.button("MASUK MODUL ➔", key="btn_m5", use_container_width=True, on_click=tukar_muka, args=("5. BCP Manual",))
+
+
+# ---------------------------------------------------------
+# MUKA SURAT 1: PENDAFTARAN WAD
+# ---------------------------------------------------------
+elif st.session_state['page'] == '1. Pendaftaran':
+    st.button("🔙 Kembali ke Laman Utama", on_click=tukar_muka, args=("Laman Utama",))
+    st.markdown("---")
+    
     st.subheader("Daftar Penerimaan Wad (Sistem Live)")
+    st.caption("Jururawat / PPK: Sila isikan maklumat di bawah dan klik butang untuk mulakan masa.")
+    
     col1, col2 = st.columns(2)
     with col1:
         wad_baru = st.selectbox("🏥 Pilih Unit / Wad Anda", senarai_unit, key="wad_live")
@@ -103,10 +169,14 @@ with tab1:
                 }
             st.success(f"✅ Tiket dibuka! Sila maklumkan kepada Farmasi.")
 
-# ------------------------------------------
-# TAB 2: KERJA FARMASI (WIP)
-# ------------------------------------------
-with tab2:
+
+# ---------------------------------------------------------
+# MUKA SURAT 2: FARMASI (WIP)
+# ---------------------------------------------------------
+elif st.session_state['page'] == '2. Farmasi WIP':
+    st.button("🔙 Kembali ke Laman Utama", on_click=tukar_muka, args=("Laman Utama",))
+    st.markdown("---")
+    
     st.subheader("Kerja Farmasi Yang Belum Selesai (WIP)")
     
     if not st.session_state['tiket_aktif']:
@@ -166,7 +236,6 @@ with tab2:
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
                     if st.button(f"📦 HANTAR KE KAUNTER SERAHAN", key=f"hantar_{id_tiket}", type="primary", use_container_width=True):
-                        # Pindahkan tiket ke tiket_siap (menunggu nurse ambil)
                         data_tiket['Pelaksana Saringan'] = saring_val
                         data_tiket['Pelaksana Filling'] = fill_val
                         data_tiket['Pelaksana Semakan'] = semak_val
@@ -184,16 +253,19 @@ with tab2:
                         del st.session_state['tiket_aktif'][id_tiket]
                         st.rerun()
 
-# ------------------------------------------
-# TAB 3: KAUNTER SERAHAN (WAD AMBIL BEKALAN)
-# ------------------------------------------
-with tab3:
+
+# ---------------------------------------------------------
+# MUKA SURAT 3: KAUNTER SERAHAN (WAD AMBIL)
+# ---------------------------------------------------------
+elif st.session_state['page'] == '3. Kaunter Serahan':
+    st.button("🔙 Kembali ke Laman Utama", on_click=tukar_muka, args=("Laman Utama",))
+    st.markdown("---")
+    
     st.subheader("📦 Kaunter Serahan (Sedia Untuk Diambil)")
     
     if not st.session_state['tiket_siap']:
         st.info("Tiada bekalan yang sedang menunggu untuk diambil oleh wad.")
     else:
-        # Kumpulkan tiket mengikut Wad
         wad_siap = {}
         for id_t, data_t in st.session_state['tiket_siap'].items():
             wad = data_t['Wad']
@@ -201,7 +273,6 @@ with tab3:
                 wad_siap[wad] = []
             wad_siap[wad].append((id_t, data_t))
             
-        # Paparkan satu kotak (Expander) untuk setiap Wad
         for wad, senarai_tiket in wad_siap.items():
             kategori_terlibat = [t[1]['Kategori'] for t in senarai_tiket]
             kat_str = ", ".join(kategori_terlibat)
@@ -217,19 +288,14 @@ with tab3:
                     else:
                         masa_ambil_sekarang = dapatkan_waktu_malaysia().strftime("%H:%M")
                         
-                        # Loop semua tiket untuk wad ini dan tutup serentak
                         for id_t, data_t in senarai_tiket:
                             kat = data_t['Kategori']
                             tahap_mula = 'Troli Sampai' if kat == 'Preskripsi Troli Ubat' else 'Masa Sampai'
-                            
-                            # Masukkan masa akhir
                             data_t['Masa']['Ambil Bekalan'] = masa_ambil_sekarang
                             
-                            # Pengiraan TAT Keseluruhan
                             tat_minit = kira_beza_minit(data_t['Masa'].get(tahap_mula, "00:00"), masa_ambil_sekarang)
                             status_kpi = "Patuh KPI" if (kat != 'Preskripsi Troli Ubat' or tat_minit <= 240) else "Gagal KPI"
                             
-                            # Susun untuk Dashboard
                             rekod_baru = {
                                 'Tarikh': data_t['Tarikh'], 'Mod Rekod': 'Sistem Live', 'Sebab BCP': '-',
                                 'Kategori': kat, 'Unit / Wad': wad, 'Nama Penghantar (Wad)': data_t.get('Nama Penghantar', '-'),
@@ -250,10 +316,14 @@ with tab3:
                         st.success(f"Bekalan diserahkan kepada {nama_pengambil}. Tiket ditutup!")
                         st.rerun()
 
-# ------------------------------------------
-# TAB 4: DASHBOARD
-# ------------------------------------------
-with tab4:
+
+# ---------------------------------------------------------
+# MUKA SURAT 4: DASHBOARD ANALITIK
+# ---------------------------------------------------------
+elif st.session_state['page'] == '4. Dashboard':
+    st.button("🔙 Kembali ke Laman Utama", on_click=tukar_muka, args=("Laman Utama",))
+    st.markdown("---")
+    
     df = st.session_state['rekod_selesai']
     if df.empty:
         st.info("Belum ada tiket disiapkan.")
@@ -287,10 +357,14 @@ with tab4:
         st.dataframe(df, use_container_width=True)
         st.download_button("📥 Muat Turun CSV", data=df.to_csv(index=False).encode('utf-8'), file_name=f"WIPDASH_{dapatkan_tarikh_malaysia()}.csv", mime="text/csv")
 
-# ------------------------------------------
-# TAB 5: BCP (MANUAL)
-# ------------------------------------------
-with tab5:
+
+# ---------------------------------------------------------
+# MUKA SURAT 5: BCP (KEMASUKAN MANUAL)
+# ---------------------------------------------------------
+elif st.session_state['page'] == '5. BCP Manual':
+    st.button("🔙 Kembali ke Laman Utama", on_click=tukar_muka, args=("Laman Utama",))
+    st.markdown("---")
+    
     st.subheader("⚠️ BCP (Kemasukan Manual)")
     with st.form("form_bcp", clear_on_submit=True):
         col_bcp1, col_bcp2 = st.columns(2)
